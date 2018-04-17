@@ -48,7 +48,8 @@ int main (int argc, char** argv) {
 	/* Pack struct with server data */	 	
 	memset (&server_addr, 0, sizeof (server_addr));
 	server_addr.sin_family = AF_INET;
-	memcpy (&server_addr.sin_addr, host->h_addr, host->h_length);
+	//memcpy (&server_addr.sin_addr, host->h_addr, host->h_length);
+	inet_pton(AF_INET, argv[1], &(server_addr.sin_addr));
 	server_addr.sin_port = htons (PORT);
 
 	// establish a socket FD for remote communications
@@ -57,6 +58,7 @@ int main (int argc, char** argv) {
        		return -1;
      	}
 
+	printf("[CLIENT] : Connecting to server with IP %s \n", inet_ntoa(server_addr.sin_addr));
 	// connect to server
 	if (connect (srvrSock, (struct sockaddr *)&server_addr,sizeof (server_addr)) < 0) {
 		printf ("[CLIENT] : Connect to Server - FAILED\n");

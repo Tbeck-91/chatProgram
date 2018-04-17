@@ -22,13 +22,15 @@ int main(void) {
 
 	memset (&server_addr, 0, sizeof (server_addr));
 	server_addr.sin_family = AF_INET;
-	server_addr.sin_addr.s_addr = htonl (INADDR_ANY);
-	server_addr.sin_port = htons (PORT);
-	
+	//server_addr.sin_addr.s_addr = htonl (INADDR_ANY);
+	if((inet_pton(AF_INET,"192.168.146.132", &(server_addr.sin_addr))) == -1) return -1;
+	server_addr.sin_port = htons (PORT);	
 	srvrSock = socket (AF_INET, SOCK_STREAM, 0);
 
 	client_len = sizeof (client_addr);
 	bind (srvrSock, (struct sockaddr *)&server_addr, sizeof (server_addr));
+	printf("[SERVER] : Listening for connections... \n");
+	fflush(stdout);
 	listen (srvrSock, 5);
 	clSock = accept (srvrSock,(struct sockaddr *)&client_addr, &client_len); 
 

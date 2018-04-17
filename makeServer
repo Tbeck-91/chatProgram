@@ -25,5 +25,5 @@ $(EXE): $(OBJ) $(STD_HEADERS)
 	$(CC) $< $(CFLAGS)$@
 
 clean:
-	$(RM) $(OBJ)
+	$(RM) obj/*.o
 	$(RM) $(EXE)	
