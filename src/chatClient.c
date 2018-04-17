@@ -19,26 +19,59 @@ int main (int argc, char** argv) {
 	CLIENT clientInfo;
 	WINDOW* inputW; // input window
 	WINDOW* historyW; // msg history window
+	struct hostent*    host;
+	struct sockaddr_in server_addr;
+	int srvrSock;
 
 	char buf[MSG_LEN + 1], chr;
 	bool done = 0;
 	int chrCount = 0;
-	bool bckspc = true;	
+	bool bckspc = true;
+
+	// no cl args
+	if (argc != 2) {
+		printf("Usage: chat-client <server-addr>\n");
+		return -1;
+	}
+	
+	// resolve hostname (or ipv4 addr) into canonical ip
+	if ((host = gethostbyname(argv[1])) == NULL) {
+		printf("Failed to to get host name! \n");
+		return -1;		
+	}	
 
 	memset(buf, 0, 81);
 
 	/* Get client Info */
-	setupClient(&clientInfo);	
+	setupClient(&clientInfo);
+
+	/* Pack struct with server data */	 	
+	memset (&server_addr, 0, sizeof (server_addr));
+	server_addr.sin_family = AF_INET;
+	memcpy (&server_addr.sin_addr, host->h_addr, host->h_length);
+	server_addr.sin_port = htons (PORT);
+
+	// establish a socket FD for remote communications
+	if ((srvrSock = socket (AF_INET, SOCK_STREAM, 0)) < 0)  {
+		printf ("[CLIENT] : Getting Client Socket - FAILED\n");
+       		return -1;
+     	}
+
+	// connect to server
+	if (connect (srvrSock, (struct sockaddr *)&server_addr,sizeof (server_addr)) < 0) {
+		printf ("[CLIENT] : Connect to Server - FAILED\n");
+		close (srvrSock);
+		return -1;
+	}
+
+		
 	initCurses();
-
 	setUpWindows(&inputW, &historyW);
-
 	
 	mvprintw(LINES-1, 0, "ONLINE:");
 	attron(COLOR_PAIR(clientInfo.colour));
 	mvprintw(LINES - 1, 9, " %s", clientInfo.username);
-	attroff(COLOR_PAIR(clientInfo.colour));	
-		
+	attroff(COLOR_PAIR(clientInfo.colour));			
 
 	update(inputW, historyW);	
 	while (!done) {
@@ -48,12 +81,17 @@ int main (int argc, char** argv) {
 		if (isprint(chr = getch()) && chrCount < MSG_LEN) buf[chrCount++] = chr;
 		if (chr == '`') break;
 
+		// fire off message to server and write to message win
 		if (chr == 10) {
 			buf[chrCount] = '\0';
+			write (srvrSock, buf, strlen (buf)); 
+			if (!strcmp(buf, ">>bye<<")) break; // see if user wanted to quit
+
 			printHistory(&clientInfo, buf, historyW, 1);
 			clearInputW(inputW, buf);
 			chrCount = 0;		
 		}
+		// provide backspace functionality
 		else if (chr== KEY_BACKSPACE || chr == 127 || chr == 8) {
 			
 			handleBckspc(inputW, &chrCount);			
@@ -70,7 +108,8 @@ int main (int argc, char** argv) {
 	delwin(inputW);
 	delwin(historyW);
 	endwin();
-	
+	close(srvrSock); // close socket
+	printf ("CLIENT has exited successfully. \n");
 
 	return 0;
 }
@@ -192,6 +231,7 @@ void printHistory(CLIENT* clientInfo, char* buf, WINDOW* historyW, bool client) 
 	int msgLen;
 	int i;
 
+	// message exceeds parcel boundary
 	while ((msgLen = strlen(buf)) > PARCEL_LEN ) {
 
 		// walk back a few characters and check for a space
@@ -216,10 +256,11 @@ void printHistory(CLIENT* clientInfo, char* buf, WINDOW* historyW, bool client) 
 
 	formatOutputString(buf, lineBuf, clientInfo, true);
 	
+	// reached the end of our history window, time to scroll up
 	if (histCount == (LINES - INPUT_BOX_SZ - 3)) {
 		wborder(historyW, ' ', ' ', ' ',' ',' ',' ',' ',' '); // remove border
 		wscrl(historyW, 1); // scroll up one line
-		wborder(historyW, '|', '|', '-', '-', '+', '+', '+', '+');
+		wborder(historyW, '|', '|', '-', '-', '+', '+', '+', '+'); 
 		mvwprintw(historyW, 0, COLS/2 - 4, "MESSAGES");
 		histCount -= 1;
 	}	
