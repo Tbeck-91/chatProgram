@@ -27,9 +27,10 @@
 #include <fcntl.h>
 #include <time.h>
 #include <string.h>
+#include <pthread.h>
+#include <sys/shm.h>
 
-
-#define PORT 5000
+#define PORT 5035
 #define ERR -1
 #define USRNAME_LEN 5
 #define MSG_LEN 80
@@ -39,24 +40,27 @@
 #define true 1
 #define MAX_CLIENTS 10
 #define SPACE 32
+#define SHM_PERM 0777
+#define SHM_VAL 1338
 
 typedef struct {
 
 	char username[USRNAME_LEN + 1];
 	struct in_addr ipAddr;
 	char colour;
-	int cID; // client ID
+	int clSockFD; // client socket FD
+	char msg[MSG_LEN + 1];
 
 } CLIENT;
 
 typedef struct {
 
-	char msg[MSG_LEN];
-	bool finalmsg; 
-	int cID;
+	int clientSocks[MAX_CLIENTS];
+	int numClients;
+	int srvrSock;
+	int clSock;		
 	
-} MSG;
-
+} SERVER_DATA;
 
 
 

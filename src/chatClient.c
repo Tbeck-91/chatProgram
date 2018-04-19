@@ -1,4 +1,3 @@
-#include "../inc/chatProgram.h"
 #include "../inc/chatClient.h"
 #include <curses.h>
 
@@ -14,20 +13,26 @@ void setUpWindows(WINDOW** inputW, WINDOW** historyW);
 void setUpWindows(WINDOW** inputW, WINDOW** historyW);
 void formatOutputString(char* msgBuf, char* lineBuf,CLIENT* clientInfo, bool client);
 
-int main (int argc, char** argv) {
 
-	CLIENT clientInfo;
-	WINDOW* inputW; // input window
-	WINDOW* historyW; // msg history window
+/* Thread utilities */
+void* handleOutgoing (void* srvrSock);
+int initShMem(int shmVal, CLIENT** clientInfo);
+void* handleIncoming (void* srvrSock);
+
+/* Global WINDOW pointers */
+
+WINDOW* inputW; // input window
+WINDOW* historyW; // msg history window
+CLIENT clientInfo;
+
+int main (int argc, char** argv) {
+		
 	struct hostent*    host;
 	struct sockaddr_in server_addr;
 	int srvrSock;
-
-	char buf[MSG_LEN + 1], chr;
-	bool done = 0;
-	int chrCount = 0;
-	bool bckspc = true;
-
+	int retVal;
+	pthread_t tid; // thread id, gets thrown away since not needed
+	
 	// no cl args
 	if (argc != 2) {
 		printf("Usage: chat-client <server-addr>\n");
@@ -40,15 +45,9 @@ int main (int argc, char** argv) {
 		return -1;		
 	}	
 
-	memset(buf, 0, 81);
-
-	/* Get client Info */
-	setupClient(&clientInfo);
-
 	/* Pack struct with server data */	 	
 	memset (&server_addr, 0, sizeof (server_addr));
 	server_addr.sin_family = AF_INET;
-	//memcpy (&server_addr.sin_addr, host->h_addr, host->h_length);
 	inet_pton(AF_INET, argv[1], &(server_addr.sin_addr));
 	server_addr.sin_port = htons (PORT);
 
@@ -57,7 +56,7 @@ int main (int argc, char** argv) {
 		printf ("[CLIENT] : Getting Client Socket - FAILED\n");
        		return -1;
      	}
-
+	
 	printf("[CLIENT] : Connecting to server with IP %s \n", inet_ntoa(server_addr.sin_addr));
 	// connect to server
 	if (connect (srvrSock, (struct sockaddr *)&server_addr,sizeof (server_addr)) < 0) {
@@ -66,52 +65,31 @@ int main (int argc, char** argv) {
 		return -1;
 	}
 
-		
+/*	
+	create shared memory to hold our client information
+	we'll use our socket file descriptor number to generate
+
+	printf("Creating shared memory! \n");
+	if (initShMem(srvrSock, &clientInfo) == -1) {
+		printf("Couldn't create shared memory for client!\n");
+		return -1;
+	}	
+	printf("Finished creating shared mem! \n");
+*/	
+
+	/* Get client Info */
+	setupClient(&clientInfo);
+	printf("Finished creating client! \n");	
+
+	// setup curses and windows	
 	initCurses();
 	setUpWindows(&inputW, &historyW);
-	
-	mvprintw(LINES-1, 0, "ONLINE:");
-	attron(COLOR_PAIR(clientInfo.colour));
-	mvprintw(LINES - 1, 9, " %s", clientInfo.username);
-	attroff(COLOR_PAIR(clientInfo.colour));			
-
 	update(inputW, historyW);	
-	while (!done) {
-		
-		bckspc = 0;
-		
-		if (isprint(chr = getch()) && chrCount < MSG_LEN) buf[chrCount++] = chr;
-		if (chr == '`') break;
-
-		// fire off message to server and write to message win
-		if (chr == 10) {
-			buf[chrCount] = '\0';
-			write (srvrSock, buf, strlen (buf)); 
-			if (!strcmp(buf, ">>bye<<")) break; // see if user wanted to quit
-
-			printHistory(&clientInfo, buf, historyW, 1);
-			clearInputW(inputW, buf);
-			chrCount = 0;		
-		}
-		// provide backspace functionality
-		else if (chr== KEY_BACKSPACE || chr == 127 || chr == 8) {
-			
-			handleBckspc(inputW, &chrCount);			
-			bckspc = 1;
 	
-		}		
-		
-		updateInputWin(inputW, chrCount,  buf, bckspc);
-		// redraw screen
-		update(inputW, historyW);		
-	}	
-		
-	// free windows and exit curses mode
-	delwin(inputW);
-	delwin(historyW);
-	endwin();
-	close(srvrSock); // close socket
-	printf ("CLIENT has exited successfully. \n");
+	// Finally, launch our threads! 
+	pthread_create (&tid, NULL, handleIncoming, (void*)&srvrSock);
+	pthread_create (&tid, NULL, handleOutgoing, (void*)&srvrSock);	
+	pthread_join(tid, (void *)(&retVal));	
 
 	return 0;
 }
@@ -244,7 +222,7 @@ void printHistory(CLIENT* clientInfo, char* buf, WINDOW* historyW, bool client) 
 			strncpy(tmpBuf, buf, i);
 			strcpy(buf, (buf + i));
 			buf[i] = tmpBuf[i] = '\0';			
-			printHistory(clientInfo, tmpBuf, historyW, 1);
+			printHistory(clientInfo, tmpBuf, historyW, client);
 			break;
 		}
 		else{
@@ -252,7 +230,7 @@ void printHistory(CLIENT* clientInfo, char* buf, WINDOW* historyW, bool client) 
 			strncpy(tmpBuf, buf, PARCEL_LEN);
 			strcpy(buf, (buf + PARCEL_LEN ));
 			buf[PARCEL_LEN] = tmpBuf[PARCEL_LEN] = '\0';
-			printHistory(clientInfo, tmpBuf, historyW, 1);
+			printHistory(clientInfo, tmpBuf, historyW, client);
 		}		
 	}
 
@@ -331,6 +309,72 @@ void updateInputWin(WINDOW* inputW, int chrCount, char* buf, bool bckspc) {
 	if (!bckspc && chrCount < 80) wprintw(inputW, "%c", buf[chrCount != 0 ? chrCount - 1 : 0]);
 
 }
+
+void* handleIncoming (void* srvrSock) {
+
+	CLIENT incomingClient;
+	int sockFD = *((int*)srvrSock);
+	
+	while (true) {		
+		read (sockFD, (void*)&incomingClient, sizeof (CLIENT));
+		printHistory(&incomingClient, incomingClient.msg, historyW, false);
+		// redraw screen
+		update(inputW, historyW);		
+	} 
+	
+}
+
+void* handleOutgoing (void* srvrSock) {
+
+	int sockFD = *((int*)srvrSock);
+	char buf[MSG_LEN + 1], chr;
+	bool done = 0;
+	int chrCount = 0;
+	bool bckspc = true;
+	
+
+	while (!done) {
+		
+		bckspc = 0;
+		
+		if (isprint(chr = getch()) && chrCount < MSG_LEN) buf[chrCount++] = chr;
+		
+		// fire off message to server and write to message win
+		if (chr == 10) {
+			buf[chrCount] = '\0';
+			strcpy(clientInfo.msg, buf);
+			write (sockFD, &clientInfo, sizeof (CLIENT));
+			if (!strcmp(buf, ">>bye<<")) break; // see if user wanted to quit
+
+			printHistory(&clientInfo, buf, historyW, true);
+			clearInputW(inputW, buf);
+			chrCount = 0;		
+		}
+
+		// provide backspace functionality
+		else if (chr== KEY_BACKSPACE || chr == 127 || chr == 8) {
+			
+			handleBckspc(inputW, &chrCount);			
+			bckspc = 1;
+	
+		}		
+		
+		updateInputWin(inputW, chrCount,  buf, bckspc);
+		// redraw screen
+		update(inputW, historyW);		
+	}	
+		
+	// free windows and exit curses mode
+	delwin(inputW);
+	delwin(historyW);
+	endwin();
+	close(sockFD); // close socket
+	printf ("CLIENT has exited successfully. \n");
+	fflush(stdout);
+	pthread_kill(pthread_self(), SIGTERM); // kill thread and root process
+	
+}
+
 
 
 

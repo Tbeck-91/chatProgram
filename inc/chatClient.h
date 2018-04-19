@@ -1,3 +1,4 @@
+#include "../inc/chatProgram.h"
 
 
 #define MIN_COLOUR 1
@@ -6,4 +7,3 @@
 #define QUIT_COMMAND ">>bye<<"
 
 
-void setupClient(CLIENT* clientInfo);

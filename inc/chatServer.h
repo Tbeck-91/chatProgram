@@ -16,3 +16,4 @@
 
 //int createSocket(int port) 
 //int getClient(int sockFD, struct sockaddr_in* clientAddr) 
+void* clientHandler (void* clSock);
