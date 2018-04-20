@@ -14,6 +14,6 @@
 #define BACKLOG 5
 #define MAX_CLIENTS 10
 
-//int createSocket(int port) 
-//int getClient(int sockFD, struct sockaddr_in* clientAddr) 
-void* clientHandler (void* clSock);
+int createSocket(int port); 
+void* clientHandler (void* shmID);
+int initShMem(int shmVal,  SERVER_DATA** srvrInfo);

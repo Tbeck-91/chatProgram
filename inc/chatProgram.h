@@ -30,7 +30,7 @@
 #include <pthread.h>
 #include <sys/shm.h>
 
-#define PORT 5035
+#define PORT 5039
 #define ERR -1
 #define USRNAME_LEN 5
 #define MSG_LEN 80

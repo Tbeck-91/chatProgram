@@ -14,7 +14,7 @@ CC = cc
 LD = cc
 CFLAGS = -c  -o
 LDFLAGS = -lpthread -o
-SRC = src/chatClient.c 
+SRC = src/chatClient.c src/clientUtilities.c
 OBJ = $(patsubst src/%.c, obj/%.o, $(SRC)) 
 RM = rm
 
