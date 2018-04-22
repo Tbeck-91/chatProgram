@@ -84,17 +84,18 @@ void* clientHandler (void* shmid) {
 		pthread_kill(pthread_self(), SIGTERM);
 	}
 	
-	int sockFD = srvrInfo->clSock;		
+	int sockFD = srvrInfo->clSock;	
+
+	// first thing the server must send over is the ip addr of the client
+	write (sockFD, &(srvrInfo->clientIP), sizeof(struct in_addr));	
 	
 	memset(&clientData, 0, sizeof (CLIENT));
 	while (strcmp(clientData.msg, ">>bye<<")) {
 	
 		memset(&clientData, 0, sizeof (CLIENT));
 		read (sockFD, (void*)&clientData, sizeof (CLIENT));
-
-		if (clientData.msg[0] != 0) printf("Server recieved msg: \"%s\", from %s \n", clientData.msg, clientData.username);
-		// Broadcast the message to all other clients 
 		
+		// Broadcast the message to all other clients 		
 		for (int i = 0; i < srvrInfo->numClients; i++) {
 			if (srvrInfo->clientSocks[i] != sockFD) write (srvrInfo->clientSocks[i], &clientData, sizeof (CLIENT));
 		}
@@ -112,12 +113,11 @@ void* clientHandler (void* shmid) {
 
 	// If this thread is the last to exit, close server socket and send terminate signal to proccess
 	if (srvrInfo->numClients == 0) {
-		printf("\n[SERVER] : All clients are gone - SHUTDOWN INITIATED. \n");
-		fflush(stdout);
+		
 		close(srvrInfo->srvrSock);
 
 		shmdt (srvrInfo); // detach from shared mem
-		shmctl(shmID, IPC_RMID, 0); 
+		shmctl(shmID, IPC_RMID, 0); // free shared mem
 		pthread_kill(pthread_self(), SIGTERM);
 	}	
 }

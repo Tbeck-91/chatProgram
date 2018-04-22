@@ -38,13 +38,13 @@ int main(void) {
 	srvrInfo->numClients = 0;
 	// server will loop until the last client sends it a signal
 	while (true) {
-
 		
 		if (srvrInfo->numClients < MAX_CLIENTS) {
 				
 			srvrInfo->clSock = accept (srvrInfo->srvrSock,(struct sockaddr *)&client_addr, &client_len); 
-			srvrInfo->clientSocks[srvrInfo->numClients++] = srvrInfo->clSock;			
-		
+			srvrInfo->clientSocks[srvrInfo->numClients++] = srvrInfo->clSock;
+			srvrInfo->clientIP = client_addr.sin_addr;
+								
 			// launch thread to handle our new client
 			pthread_create(&(tid[(srvrInfo->numClients-1)]), NULL, clientHandler, (void *)&shmID);
 		}

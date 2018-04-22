@@ -20,13 +20,7 @@ void setupClient(CLIENT* clientInfo) {
 	char* chr;
 	int colour;
 	int retVal;
-	struct hostent* ipAddr;
-	
-	
-	// stealthily store clients IP as a struct in_addr  ;-)
-	gethostname(hostNameBuf, 128);
-	ipAddr = gethostbyname(hostNameBuf);
-	memcpy(&(clientInfo->ipAddr), ipAddr->h_addr, sizeof(struct in_addr));
+
 	
 	printf (
 			"\nWelcome to the Beck - Corriveau Chat Room! \n"
@@ -45,7 +39,8 @@ void setupClient(CLIENT* clientInfo) {
 	printf("1. Red 2. Green 3. Yellow 4. Blue\n>> ");
 	
 	
-		
+	// get number within range of valid colours from user.
+	// this will be used to colour their username	
 	while(!(colour >= MIN_COLOUR && colour <= MAX_COLOUR)) {
 
 		stdin = freopen(NULL,"r",stdin); // clear input bufffer
@@ -63,11 +58,10 @@ void setupClient(CLIENT* clientInfo) {
 }
 
 WINDOW* initWindow( int h, int w, int y, int x) {
-
+	// create new window and draw a border around it
 	WINDOW* win = newwin(h, w, y, x);
 	wborder(win, '|', '|', '-', '-', '+', '+', '+', '+');
 	return win;
-
 }
 
 void setUpWindows(WINDOW** inputW, WINDOW** historyW) {
@@ -75,7 +69,7 @@ void setUpWindows(WINDOW** inputW, WINDOW** historyW) {
 
 	*historyW = initWindow(LINES - INPUT_BOX_SZ - 2 , COLS, INPUT_BOX_SZ + 1, 0);
 	*inputW = initWindow(INPUT_BOX_SZ, COLS, 0, 0);
-	scrollok(*historyW, true); // enable scrolling
+	scrollok(*historyW, true); // enable window scrolling
 
 	mvwprintw(*historyW, 0, COLS/2 - 4, "MESSAGES");
 	mvwprintw(*inputW, INPUT_BOX_SZ -1, (COLS/2) - 3, "[%02d/%d]", 0, MSG_LEN);
@@ -84,7 +78,7 @@ void setUpWindows(WINDOW** inputW, WINDOW** historyW) {
 
 void initCurses(void) {
 
-	curs_set(0);
+	curs_set(0); // make cursor invisible 
 
 	/* Startup Curses */	
 	initscr(); // enter curses mode
@@ -158,7 +152,6 @@ void printHistory(CLIENT* clientInfo, char* buf, WINDOW* historyW, bool client) 
 	mvwchgat(historyW, histCount, 18, 5, A_BOLD, clientInfo->colour, NULL);
 	wmove(historyW, 0, 0);
 	histCount++;
-
 }
 
 void formatOutputString(char* msgBuf, char* lineBuf, CLIENT* clientInfo, bool client) {
@@ -177,6 +170,7 @@ void formatOutputString(char* msgBuf, char* lineBuf, CLIENT* clientInfo, bool cl
 
 void clearInputW(WINDOW* inputW, char* buf) {
 
+	// erase everything in window and redraw border and message prompt
 	werase(inputW);
 	wborder(inputW, '|', '|', '-', '-', '+', '+', '+', '+');
 	mvwprintw(inputW, 2, 1, ">");	
@@ -189,6 +183,7 @@ void handleBckspc(WINDOW* win, int* chrCounter) {
 
 	int cury, curx;
 
+	// erase last character and move cursor back one space
 	getyx(win, cury, curx);
 	mvwprintw(win, cury, curx-1, " ");
 	wmove(win, cury, curx-1);
@@ -213,20 +208,37 @@ void updateInputWin(WINDOW* inputW, int chrCount, char* buf, bool bckspc) {
 
 	// print last character entered onto input screen
 	if (!bckspc && chrCount < MSG_LEN) wprintw(inputW, "%c", buf[chrCount != 0 ? chrCount - 1 : 0]);
-
 }
 
 void* handleIncoming (void* srvrSock) {
 
 	CLIENT incomingClient;
 	int sockFD = *((int*)srvrSock);
+	bool done = false;
 	
-	while (true) {		
-		read (sockFD, (void*)&incomingClient, sizeof (CLIENT));
-		printHistory(&incomingClient, incomingClient.msg, historyW, false);
-		// redraw screen
-		update(inputW, historyW);		
+	while (!done) {		
+		// make sure read is successfull
+		if (recv (sockFD, (void*)&incomingClient, sizeof (CLIENT), 0)) {
+			printHistory(&incomingClient, incomingClient.msg, historyW, false);
+			// redraw screen
+			update(inputW, historyW);	
+		}
+		// server has disconnected
+		else done = true;	
 	} 
+	/* 
+	   the following is only executed if the client
+	   has been disconnected from the server
+	*/
+
+	close(sockFD); // close socket
+
+	// free windows and exit curses mode
+	delwin(inputW);
+	delwin(historyW);
+	endwin();
+	
+	pthread_kill(pthread_self(), SIGTERM); // kill thread and root process
 	
 }
 
@@ -236,8 +248,7 @@ void* handleOutgoing (void* srvrSock) {
 	char buf[MSG_LEN + 1], chr;
 	bool done = 0;
 	int chrCount = 0;
-	bool bckspc = true;
-	
+	bool bckspc = true;	
 
 	while (!done) {
 		
@@ -249,7 +260,9 @@ void* handleOutgoing (void* srvrSock) {
 		if (chr == 10) {
 			buf[chrCount] = '\0';
 			strcpy(clientInfo.msg, buf);
-			write (sockFD, &clientInfo, sizeof (CLIENT));
+
+			// shutdown client if write fails
+			if (write (sockFD, &clientInfo, sizeof (CLIENT)) == -1) break; 
 			if (!strcmp(buf, ">>bye<<")) break; // see if user wanted to quit
 
 			printHistory(&clientInfo, buf, historyW, true);
@@ -274,12 +287,9 @@ void* handleOutgoing (void* srvrSock) {
 	// free windows and exit curses mode
 	delwin(inputW);
 	delwin(historyW);
-	endwin();
+	endwin();	
 	
-	printf ("CLIENT has exited successfully. \n");
-	fflush(stdout);
-	pthread_kill(pthread_self(), SIGTERM); // kill thread and root process
-	
+	pthread_kill(pthread_self(), SIGTERM); // kill thread and root process	
 }
 
 

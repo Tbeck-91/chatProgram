@@ -58,7 +58,8 @@ typedef struct {
 	int clientSocks[MAX_CLIENTS];
 	int numClients;
 	int srvrSock;
-	int clSock;		
+	int clSock;
+	struct in_addr clientIP;		
 	
 } SERVER_DATA;
 

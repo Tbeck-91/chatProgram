@@ -31,9 +31,8 @@ int main (int argc, char** argv) {
 	if ((srvrSock = socket (AF_INET, SOCK_STREAM, 0)) < 0)  {
 		printf ("[CLIENT] : Getting Client Socket - FAILED\n");
        		return -1;
-     	}
-	
-	printf("[CLIENT] : Connecting to server with IP %s \n", inet_ntoa(server_addr.sin_addr));
+     	}	
+
 	// connect to server
 	if (connect (srvrSock, (struct sockaddr *)&server_addr,sizeof (server_addr)) < 0) {
 		printf ("[CLIENT] : Connect to Server - FAILED\n");
@@ -48,11 +47,17 @@ int main (int argc, char** argv) {
 	// setup curses and windows	
 	initCurses();
 	setUpWindows(&inputW, &historyW);
-	update(inputW, historyW);	
+	update(inputW, historyW);
+
+	// the client needs to read it's ip address from the server
+	// apparently the server needs to tell the client who they are! 
+	recv (srvrSock, (void*)&(clientInfo.ipAddr), sizeof (struct in_addr), 0);
 	
 	// Finally, launch our threads! 
-	pthread_create (&tid, NULL, handleIncoming, (void*)&srvrSock);
 	pthread_create (&tid, NULL, handleOutgoing, (void*)&srvrSock);	
+	pthread_create (&tid, NULL, handleIncoming, (void*)&srvrSock);
+	
+	// wait for thread to "rejoin". In reality, one of the threads will kill the process
 	pthread_join(tid, (void *)(&retVal));	
 
 	return 0;

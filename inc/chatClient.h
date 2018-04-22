@@ -6,13 +6,13 @@
 #define INPUT_BOX_SZ 5
 #define QUIT_COMMAND ">>bye<<"
 
-/* Global WINDOW pointers */
+/* Global Variables */
 
 WINDOW* inputW; // input window
 WINDOW* historyW; // msg history window
 CLIENT clientInfo;
 
-
+/* UI / Curses functions */
 WINDOW* initWindow(int h, int w, int y, int x);
 void setupClient(CLIENT* clientInfo);
 void initCurses(void);
